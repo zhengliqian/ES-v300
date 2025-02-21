@@ -1,0 +1,23 @@
+D1
+D2
+C
+L
+
+C page data
+D1 mask
+
+d1 copy d2
+d2 data compare
+1 dismatch, 0 match
+d2 or -》 L
+
+C page data
+d1 copy d2
+d2 C compare
+d2 or -》 L
+
+page1 010100000
+page2 110000000
+
+L     110100000
+SFBC

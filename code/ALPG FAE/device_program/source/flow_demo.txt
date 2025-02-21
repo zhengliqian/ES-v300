@@ -1,0 +1,14 @@
+// SORT1
+//        Label , Function			, Rej ,  pre_exec	, post_exec	, P Branch, F Branch, Bin , Test Name
+RUN_TEST(	"1" , TEST_INIT			, _   ,  Dummy		, Dummy		, "NEXT"  , "END"   ,   1 , "TEST_INIT"			)
+RUN_TEST(	"2"	, DC_OPEN_SHORT		, _   ,  pre_exec   , post_exec , "NEXT"  , "END"	,   2 , "DC_OPEN_SHORT"		)
+RUN_TEST(	"3"	, DC_LEAKAGE 		, _   ,  pre_exec   , post_exec , "NEXT"  , "END"	,   3 , "DC_LEAKAGE"		)
+RUN_TEST(	"4"	, DC_ICC_GROSS 		, _   ,  pre_exec   , post_exec , "NEXT"  , "END"	,   4 , "DC_ICC_GROSS"		)
+RUN_TEST(	"5"	, DC_ICC_STANDBY 	, _   ,  pre_exec   , post_exec , "NEXT"  , "END"	,   5 , "DC_ICC_STANDBY"	)
+RUN_TEST(	"10", FUN_POR 			, _   ,  pre_exec   , post_exec , "NEXT"  , "END"	,   10, "FUN_POR"			)
+RUN_TEST(	"11", FUN_SLC_ERS 		, _   ,  pre_exec   , post_exec , "NEXT"  , "END"	,   11, "FUN_SLC_ERS"		)
+RUN_TEST(	"12", FUN_SLC_PGM	 	, _   ,  pre_exec   , post_exec , "NEXT"  , "END"	,   12, "FUN_SLC_PGM"		)
+RUN_TEST(	"13", FUN_SLC_RD_ONEPAGE, _   ,  pre_exec   , post_exec , "NEXT"  , "END"	,   13, "FUN_SLC_RDOPG"		)
+RUN_TEST(	"14", FUN_SLC_PGM	 	, _   ,  pre_exec   , post_exec , "NEXT"  , "END"	,   14, "FUN_SLC_PGM_INV"	)
+RUN_TEST(	"15", FUN_SLC_RD_ONEPAGE, _   ,  pre_exec   , post_exec , "NEXT"  , "END"	,   15, "FUN_SLC_RDOPG_ALL0")
+RUN_TEST(	"99", TEST_END			, _   ,  Dummy		, Dummy		, "NEXT"  , "END"   ,   99, "TEST_END"			)

@@ -1,0 +1,407 @@
+pattern指令：
+1.NOP
+;*******************************************************************************
+MODULE BEGIN
+	REGISTER
+    	Q1	= 0			;;	DeviWE -> Dum -> Program
+    START	Demo_NOP
+    	NOP						TS1										
+        NOP						TS1								MSTA<Q1		
+        NOP						TS1	WE							TP<TPH1						
+        NOP						TS1	WE	CK	W	IFD			    D<TP		
+        NOP						TS1	WE	CK	W					D<1					
+        NOP						TS1	WE	CK	W					D<0		
+        NOP						TS1	WE	CK	W					D<1		
+        NOP						TS1	WE	CK	W					D<1					
+        NOP						TS1	WE	CK	W					D<1					
+        NOP						TS1	WE							TP<#00					
+        NOP						TS1	WE	CK	R	IFD	MR			D<TP					
+        NOP						TS1	WE	CK	R	IFD	MR			D<TP		
+        NOP						TS1	WE	CK	R	IFD	MR			D<TP		
+        NOP						TS1	WE		
+        NOP						TS1	STPS				
+MODULE END
+;*******************************************************************************
+
+2.JNCn, N=1~32 JNCn->JNCn,CFLGn，
+如何执行，
+看C code里写 SML_REG_MPAT(CFLGn,1);还是SML_REG_MPAT(CFLGn,0)				  
+CFLGn=0, 当前行走完不跳转到指定目标行，继续执行后面的pattern；				  
+CFLGn=1, 当前行走一次，跳转到指定目标行
+ex：JNC2 	.+2 				TS1    ;;
+    JNC31	JJJ(label)			TS1 WE ;;
+;*******************************************************************************					
+MODULE BEGIN
+	START   Demo_JNC
+    	JNC2	.+2				TS1		;;如果CFLG2为1，当前行走完，往下跳转到指定目标行POLL_SR6;如果CFLG2为0，当前行走完，不跳转到指定目标行,继续执行后面的pattern,
+        NOP TS1		
+        NOP						TS1								
+        JNC31	JJJ			    TS1 WE	;;如果CFLG31为1，当前行走完，跳转到指定目标行JJJ;如果CFLG31为0，当前行走完，不跳转到指定目标行,继续执行后面的pattern,
+        NOP TS2		
+        NOP						TS2	
+    STPS
+MODULE END
+;*******************************************************************************
+SUBROUTINE BEGIN
+;*******************************************************************************
+JJJ:		NOP					TS1	WE
+			NOP					TS1	WE	CK	W			D<1						
+            NOP					TS1	WE	CK	W			D<0			
+            NOP					TS1	WE	CK	W			D<1			
+            NOP					TS1	WE	CK	W			D<1						
+            NOP					TS1	WE	CK	W			D<1						
+            RTN					TS1					
+;-------------------------------------------------------------------			
+SUBROUTINE END
+;*******************************************************************************
+
+3.JMP :无条件跳转
+JMP		.+3			TS1	;;往下跳三行
+;*******************************************************************************
+MODULE BEGIN
+	START	Demo_JMP
+    	NOP					TS1			
+        JMP		.+3			TS1	WE							;;无条件往下跳转3行，到NOP	TS1	WE	CK	W	D<1		
+        NOP					TS1	WE	CK	W			D<1					
+        NOP					TS1	WE	CK	W			D<0		
+        NOP					TS1	WE	CK	W			D<1		
+        NOP					TS1	WE	CK	W			D<0					
+        NOP					TS1	WE	CK	W			D<1			
+        NOP					TS1	STPS				
+MODULE END
+;*******************************************************************************
+
+4.JSR :跳转到subpattern
+;*******************************************************************************
+MODULE BEGIN
+	START	Demo_JSR
+    	NOP						TS1															
+        JSR		COMMND_IN		TS1	WE						TP<TPH1					
+        NOP						TS1	STPS				
+MODULE END
+;*******************************************************************************
+SUBROUTINE BEGIN
+;*******************************************************************************
+COMMND_IN:	NOP						TS1	WE	CK	W	IFD			D<TP
+    		RTN						TS1	WE
+;*******************************************************************************
+SUBROUTINE END
+;*******************************************************************************
+
+5.JNIn, N=1~16
+JNIn: IDX=494		
+JNI7 .				TS1 WE 	;; 这一行跑495次
+JNI7 .+1 			TS1    	;; 执行当前行，再调转到下面一行，IDX-1，继续执行后面的pattern，直到遇到JNI7才会继续loop或者跳转
+JNI7 .+3 			TS1   	;; 执行当前行，再调转到下面三行，IDX-1，继续执行后面的pattern，直到遇到JNI7才会继续loop或者跳转
+JNI7 label 	TS1    			;;见下面的例子
+ex:
+;*******************************************************************************
+MODULE BEGIN
+	REGISTER
+    	IDX4	= 494	;;	block loop		
+    START   Demo_JNI
+    	JNC1	.+3				TS1		
+        JSR		CMD_TP			TS1						TP<#DA		
+        JSR		POLL_SR6		TS1		
+        NOP						TS1	
+    ERS_BLK_LP:			
+        JSR		CMD_TP			TS1	WE					TP<#60	D1<Z		
+        JSR		ADD_YZ			TS1 WE		
+        JSR		CMD_TP			TS1	WE					TP<#D1	Z<Z+1			
+        JNI7	ERS_BLK_LP		TS1						Z<Z+D2	
+        STPS
+MODULE END
+;*******************************************************************************
+JNI7 ERS_BLK_LP(label),IDX4=494，执行下面这一段直到0，即495次
+    ERS_BLK_LP:
+		JSR		CMD_TP			TS1	WE					TP<#60	D1<Z		
+        JSR		ADD_YZ			TS1 WE		
+        JSR		CMD_TP			TS1	WE					TP<#D1	Z<Z+1			
+        JNI7	ERS_BLK_LP		TS1						Z<Z+D2
+;*******************************************************************************
+
+6.RTN：Subroutine return,子程序返回,在JSR调用的子程序终止时使用
+;*******************************************************************************
+MODULE BEGIN
+	START	Demo_RTN		
+        NOP						TS1															
+        JSR		COMMND_IN		TS1	WE						TP<TPH1					
+        NOP						TS1	
+    STPS				
+MODULE END
+;*******************************************************************************
+SUBROUTINE BEGIN
+;*******************************************************************************
+COMMND_IN:	NOP						TS1	WE	CK	W	IFD			D<TP
+     		RTN						TS1	WE                                         ;;返回主程序
+;*******************************************************************************
+SUBROUTINE END;*******************************************************************************
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+Packet指令：
+1.W & IFD W D<xx
+;*******************************************************************************
+MODULE BEGIN
+	REGISTER		Q1	= 0			;;	DeviWE -> Dum -> Program	
+    START	Demo	
+    	NOP						TS1										
+        NOP						TS1								MSTA<Q1		
+        NOP						TS1	WE							TP<TPH1						
+        NOP						TS1	WE	CK	W	IFD			    D<TP		
+        NOP						TS1	WE	CK	W					D<1					
+        NOP						TS1	WE	CK	W					D<0		
+        NOP						TS1	WE	CK	W					D<1		
+        NOP						TS1	WE	CK	W					D<1					
+        NOP						TS1	WE	CK	W					D<1					
+        NOP						TS1	WE		
+        NOP						TS1	STPS				
+MODULE END
+;*******************************************************************************
+
+2. IFD W MW: 数据从DUM写入DeviceC code:
+START_DUT_LOOP(UT_CDUT){	dum[0].value[dut] = ubmaddr[dut][0];	dum[1].value[dut] = ubmaddr[dut][1];	dum[2].value[dut] = ubmaddr[dut][2];	dum[3].value[dut] = ubmaddr[dut][3];}END_DUT_LOOPUL_SML_SET_DUM(MW_OFFSET,4);UL_SML_REG_MPAT_Q1_Q3(MW_OFFSET);
+Pattern:
+;*******************************************************************************
+MODULE BEGIN
+	REGISTER		Q1	= 0			;;	DeviWE -> Dum -> Program
+    START	Demo	
+    	NOP						TS1										
+        NOP						TS1	WE	CK	W					D<1					
+        NOP						TS1	WE	CK	W					D<0		
+        NOP						TS1	WE	CK	W					D<1		
+        NOP						TS1	WE	CK	W					D<1					
+        NOP						TS1	WE	CK	W					D<1			
+        JSR ADDR_IN_4_DUM		TS1	WE		
+        NOP						TS1	WE		
+        NOP						TS1	STPS				
+MODULE END
+;*******************************************************************************
+SUBROUTINE BEGIN
+;*******************************************************************************
+ADDR_IN_4_DUM:	NOP TS1 WE 					MSTA<Q1 		;;
+				NOP TS2 WE 	CK W 			D<0				;;				
+                NOP TS2 WE 	CK W 			D<1				;;				
+                NOP TS2 WE 	CK W 			D<1				;;				
+                NOP TS2 WE 	CK W 			D<0				;;				
+                NOP TS2 WE 	CK W	IFD MW 					;;MSTA++				
+                NOP TS2 WE 	CK W	IFD MW 					;;MSTA++				
+                NOP TS2 WE 	CK W	IFD MW 					;;MSTA++				
+                NOP TS2 WE 	CK W	IFD MW 					;;MSTA++				
+                NOP TS2 WE 	CK				Q1<MSTA 		;;				
+                NOP TS2 WE 									;;				
+                RTN TS1 									;;
+;*******************************************************************************
+SUBROUTINE END
+;*******************************************************************************
+
+3.IFD M(Match)
+;*******************************************************************************
+MODULE BEGIN
+	START   Demo	
+    	NOP						TS1			
+        JSR		CMD_TP			TS1						TP<#DA		
+        JSR		POLL_SR6		TS1		
+        NOP						TS1	
+STPSMODULE END
+;*******************************************************************************
+SUBROUTINE BEGIN
+;-------------------------------------------------------------------
+;NAME		OP		DEST		TS	WE	CK	WRM			REG
+;-------------------------------------------------------------------
+POLL_SR5:	JMP		.+3			TS1						MSKSTB<#DF
+POLL_SR6:	JMP		.+2			TS1						MSKSTB<#BF
+POLL_SRALL:	NOP					TS1						MSKSTB<#00
+			NOP					TS1				CLR_FBC	ME<1
+POLL_LOOP:	JSR		CMD_TP		TS1						TP<#70			
+            NOP					TS1	WE			
+            NOP					TS1	WE	CK	W			D<1			;;101DD_			
+            NOP					TS1	WE	CK	W			D<0			
+            NOP					TS1	WE	CK	W			D<1			
+            NOP					TS1	WE	CK	W			D<1			;;DUMMY			
+            NOP					TS1	WE	CK	W			D<1			;;DUMMY			
+            NOP					TS8	WE	CK	M	IFD		D<#E0				
+            FLGLI16	POLL_LOOP	TS1	WE			
+            RTN					TS1						ME<0
+;-------------------------------------------------------------------
+MMM:		JNC31	JJJ			TS1 WE
+			RTN					TS1 WE					ME<0
+JJJ:		STPS				TS1 WE
+			RTN					TS1 WE					ME<0
+;-------------------------------------------------------------------
+;*******************************************************************************
+SUBROUTINE END
+;*******************************************************************************
+
+4.IFD R D<XX:
+;*******************************************************************************
+MODULE BEGIN
+	START   Demo	
+    	NOP						    TS1			
+        NOP						    TS1	WE						
+        NOP 						TS2 WE 	CK R 	IFD 	D<#AA		
+        NOP 						TS2 WE 	CK R 	IFD 	D<#55		
+        NOP 						TS2 WE 	CK R 	IFD 	D<#11		
+        NOP 						TS2 WE 				 	FCNT			
+        NOP						    TS1	
+STPSMODULE END
+;*******************************************************************************
+
+4.IFD R MR D<xx：(数据存入DUM里)
+;*******************************************************************************
+MODULE BEGIN
+	REGISTER		Q1	= 0			;;	Device -> Dum -> Program	
+    START	RDID	
+    	NOP						TS1										
+        NOP						TS1								MSTA<Q1		
+        JSR		COMMND_IN		TS1	WE							TP<TPH1			;;Command input start			
+        NOP						TS1	WE							TP<#00			;;ReadMSK		
+        NOP						TS1	WE	CK	R	IFD	MR			D<TP			;;Read		
+        NOP						TS1	WE	CK	R	IFD	MR			D<TP		
+        NOP						TS1	WE	CK	R	IFD	MR			D<TP		
+        NOP						TS1	WE		
+        NOP						TS1	STPS				
+MODULE END
+;*******************************************************************************
+
+5.IFD R MR D<PM :(数据从PM里进，数据存入DUM)
+C code:
+使用下面接口给PM放入数据SML_SET_PM || SML_FILE_PM
+9Pattern：
+;*******************************************************************************
+MODULE BEGIN
+	REGISTER		Q2	= 0			;;	Device -> Dum -> Program	
+    START	Demo	
+    	NOP						TS1										
+        NOP						TS1	WE	CK						TP<TPH				
+        NOP						TS1	WE	CK	W			D<1		MSTA<Q2			;;101DD_		
+        NOP						TS1	WE	CK	W			D<0		PSTA<P1		
+        NOP						TS1	WE	CK	W			D<1		
+        NOP						TS1	WE	CK	W			D<1						;;DUMMY		
+        NOP						TS1	WE	CK	W			D<1						;;DUMMY		
+        NOP						TS7	WE	CK	R	IFD	MR	D<PM	   				;;PM as mask		
+        NOP						TS7	WE							Q2<MSTA	        ;;		
+        NOP						TS1	STPS				
+MODULE END
+;*******************************************************************************
+
+6.W D<PM:(数据从PM里进）
+C code: 
+使用下面接口给PM放入数据SML_SET_PM || SML_FILE_PM(binfile)pattern：
+;*******************************************************************************
+MODULE BEGIN
+	START	Demo	
+    	NOP					TS1										
+        NOP					TS1	WE	CK				PSTA<P1				
+        NOP					TS1	WE	CK	W			D<1		    ;;101DD_		
+        NOP					TS1	WE	CK	W			D<0				
+        NOP					TS1	WE	CK	W			D<1		
+        NOP					TS1	WE	CK	W			D<1			;;DUMMY		
+        NOP					TS1	WE	CK	W			D<1			;;DUMMY		
+        NOP   				TS1	WE	CK	W	IFD		D<PM		;;PSTA++		
+        NOP   				TS1	WE	CK	W	IFD		D<PM		;;PSTA++		
+        NOP					TS1	WE							
+        NOP					TS1	STPS				
+MODULE END
+;*******************************************************************************
+
+7. IFD D<Asn NAND地址功能是设置array的pattern address。地址由ALPG中使用的X、Y和Z地址位指定。
+C code:
+void ADDR_1(void){	INN_SET_NAND(AS1,	X7,		X6,		X5,		X4,		X3,		X2,		X1,		X0);	
+                    INN_SET_NAND(AS2,	X15,	X14,	X13,	X12,	X11,	X10,	X9,		X8);	
+                    INN_SET_NAND(AS3,	Y7,		Y6,		Y5,		Y4,		Y3,		Y2,		Y1,		Y0);	
+                    INN_SET_NAND(AS4,	Z2,		Z1,		Z0,		Y12,	Y11,	Y10,	Y9,		Y8);	
+                    INN_SET_NAND(AS5,	Z10,	Z9,		Z8,		Z7,		Z6,		Z5,		Z4,		Z3);	
+                    INN_SET_NAND(AS6,	L,		L,		L,		L,		L,		L,		L,		L );  //
+                    INN_SET_NAND(AS7,	X23,	X22,	X21,	X20,	X19,	X18,	X17,	X16);}
+pattern:
+;*******************************************************************************
+MODULE BEGIN
+	REGISTER	
+    	D1		= 0			;;	Z temp storage		
+        Q1		= 0			;;	Device -> Dum -> Program		
+        TPH1	= #0000FFFF	;;	data, from program		
+        IDX1	= 4607		;;	byte loop (18432/4-1)=4607		
+        X		= 0			;;	byte		
+        Y		= 0			;;	pg		
+        Z		= 0			;;	blk/plane			
+    START   LOAD_PAGE_BUFFER	
+    	JSR		CMD_TP			TS1	WE					TP<#80	D1<Z		
+        JSR		ADD_XYZ			TS1 WE		
+        NOP						TS4 WE									;;wait 500ns(?)		
+        JSR		DIN_TPH1x4		TS1 WE		
+        JSR		CMD_TP			TS1	WE					TP<#11	Z<Z+1				
+        JSR		CMD_TP			TS1	WE					TP<#80		
+        JSR		ADD_XYZ			TS1 WE		
+        NOP						TS4 WE									;;wait 500ns(?)		
+        JSR		DIN_TPH1x4		TS1 WE		
+        JSR		CMD_TP			TS1	WE					TP<#11	Z<Z+1				
+        JSR		CMD_TP			TS1	WE					TP<#80		
+        JSR		ADD_XYZ			TS1 WE		
+        NOP						TS4 WE									;;wait 500ns(?)		
+        JSR		DIN_TPH1x4		TS1 WE		
+        JSR		CMD_TP			TS1	WE					TP<#11	Z<Z+1				
+        JSR		CMD_TP			TS1	WE					TP<#80		
+        JSR		ADD_XYZ			TS1 WE		
+        NOP						TS4 WE									;;wait 500ns(?)		
+        JSR		DIN_TPH1x4		TS1 WE		
+        JSR		CMD_TP			TS1	WE					TP<#1A	Z<D1				
+        JSR		PAT_END_EII		TS1	
+    STPS
+MODULE END
+;*******************************************************************************
+SUBROUTINE BEGIN
+;-------------------------------------------------------------------
+ADD_XYZ:	NOP					TS1	WE								;;011D_D
+			NOP					TS1	WE	CK	W			D<0			
+            NOP					TS1	WE	CK	W			D<1			
+            NOP					TS1	WE	CK	W			D<1			
+            NOP					TS1	WE	CK	W			D<0			;;DUMMY			
+            NOP					TS1	WE	CK	W	IFD		D<AS1			
+            NOP					TS1	WE	CK	W	IFD		D<AS2			
+            NOP					TS1	WE	CK	W	IFD		D<AS3			
+            NOP					TS1	WE	CK	W	IFD		D<AS4			
+            NOP					TS1	WE	CK	W	IFD		D<AS5			
+            NOP					TS1	WE	CK	W	IFD		D<AS6			
+            NOP					TS1	WE	CK							;;DUMMY			
+            NOP					TS1	WE			
+            RTN					TS1
+;-------------------------------------------------------------------
+SUBROUTINE END
+;*******************************************************************************
+
+8.INSERT功能
+;*******************************************************************************
+MODULE BEGIN
+	START	Demo	
+    	NOP					TS1										
+        NOP					TS1	WE	CK	W			D<1		    ;;101DD_		
+        NOP					TS1	WE	CK	W			D<0				
+        NOP					TS1	WE	CK	W			D<1		
+        NOP					TS1	WE	CK	W			D<1			;;DUMMY		
+        NOP					TS1	WE	CK	W			D<1			;;DUMMY		
+        INSERT aaa.pat		
+        NOP					TS1	WE			
+        NOP					TS1	
+    STPS				
+MODULE END
+;*******************************************************************************
+aaa.pat:	NOP						TS1	WE					TP<TPH1
+			NOP						TS1	WE	CK	W	IFD		D<TP
+;*******************************************************************************
+那这个Pattern实际为：
+;*******************************************************************************
+MODULE BEGIN
+	START	Demo	
+    	NOP					TS1										
+        NOP					TS1	WE	CK	W			D<1		    ;;101DD_		
+        NOP					TS1	WE	CK	W			D<0				
+        NOP					TS1	WE	CK	W			D<1		
+        NOP					TS1	WE	CK	W			D<1			;;DUMMY		
+        NOP					TS1	WE	CK	W			D<1			;;DUMMY		
+        NOP					TS1	WE					TP<TPH1						
+        NOP					TS1	WE	CK	W	IFD		D<TP		
+        NOP					TS1	WE			
+        NOP					TS1	
+    STPS				
+MODULE END
+;*******************************************************************************
