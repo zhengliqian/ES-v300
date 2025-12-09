@@ -37,6 +37,7 @@ module alpg_data_prase
     parameter PSTA_DW           = 22             ,
     parameter AS_MAP_DW         = 24             ,
     parameter DDR_DW            = 8              ,
+    parameter DDR_AW            = 32             ,
     parameter BYTE_DW           = 8              ,
     parameter REG_NUM0          = 8              ,
     parameter REG_NUM1          = 16             ,
@@ -57,10 +58,12 @@ module alpg_data_prase
     input      [PROTCL_LEN * GT_LANE_DW-1:0] pat_func_data                 ,
     input                                    pat_func_data_vld             ,   
     //DDR DATA
-    (*mark_debug="true"*)(*keep="true"*)output reg [PSTA_DW-1:0]                 pm_addr            = 'd0      ,
-    input      [DDR_DW-1:0]                  pm_data                       ,
-    (*mark_debug="true"*)(*keep="true"*)output reg [MSTA_DW-1:0]                 dum_addr           = 'd0      ,
-    input      [DDR_DW-1:0]                  dum_data                      ,
+    output reg                               rd_ddr_req           = 'd0    ,    
+    output reg [DDR_AW-1:0]                  rd_ddr_addr          = 'd0    ,
+    output reg                               rd_ddr_addr_vld      = 'd0    ,
+    output reg                               rd_ddr_addr_vld_last = 'd0    ,
+    input      [DDR_DW-1:0]                  rd_ddr_data                   ,
+    input                                    rd_ddr_data_vld               ,
     //CFG
     (*mark_debug="true"*)(*keep="true"*)input      [FMT_NUM-1:0]                 cfg_alpg_fmt_c0               ,             
     (*mark_debug="true"*)(*keep="true"*)input      [FMT_NUM-1:0]                 cfg_alpg_fmt_c1               ,
@@ -204,20 +207,20 @@ begin
   if(drv0_timing_sel == 'd1)
   begin
     cfg_alpg_aclk_drv0 <= cfg_alpg_aclk2_bus;
-    cfg_alpg_bclk_drv0 <= cfg_alpg_cclk2_bus;
-    cfg_alpg_cclk_drv0 <= cfg_alpg_bclk2_bus;
+    cfg_alpg_bclk_drv0 <= cfg_alpg_bclk2_bus;
+    cfg_alpg_cclk_drv0 <= cfg_alpg_cclk2_bus;
   end
   else if(drv0_timing_sel == 'd2)
   begin
     cfg_alpg_aclk_drv0 <= cfg_alpg_aclk3_bus;
-    cfg_alpg_bclk_drv0 <= cfg_alpg_cclk3_bus;
-    cfg_alpg_cclk_drv0 <= cfg_alpg_bclk3_bus;    
+    cfg_alpg_bclk_drv0 <= cfg_alpg_bclk3_bus;
+    cfg_alpg_cclk_drv0 <= cfg_alpg_cclk3_bus;    
   end
   else
   begin
     cfg_alpg_aclk_drv0 <= cfg_alpg_aclk1_bus;
-    cfg_alpg_bclk_drv0 <= cfg_alpg_cclk1_bus;
-    cfg_alpg_cclk_drv0 <= cfg_alpg_bclk1_bus; 
+    cfg_alpg_bclk_drv0 <= cfg_alpg_bclk1_bus;
+    cfg_alpg_cclk_drv0 <= cfg_alpg_cclk1_bus; 
   end
 end
 
@@ -226,20 +229,20 @@ begin
   if(drv1_timing_sel == 'd1)
   begin
     cfg_alpg_aclk_drv1 <= cfg_alpg_aclk2_bus;
-    cfg_alpg_bclk_drv1 <= cfg_alpg_cclk2_bus;
-    cfg_alpg_cclk_drv1 <= cfg_alpg_bclk2_bus;
+    cfg_alpg_bclk_drv1 <= cfg_alpg_bclk2_bus;
+    cfg_alpg_cclk_drv1 <= cfg_alpg_cclk2_bus;
   end
   else if(drv1_timing_sel == 'd2)
   begin
     cfg_alpg_aclk_drv1 <= cfg_alpg_aclk3_bus;
-    cfg_alpg_bclk_drv1 <= cfg_alpg_cclk3_bus;
-    cfg_alpg_cclk_drv1 <= cfg_alpg_bclk3_bus;    
+    cfg_alpg_bclk_drv1 <= cfg_alpg_bclk3_bus;
+    cfg_alpg_cclk_drv1 <= cfg_alpg_cclk3_bus;    
   end
   else
   begin
     cfg_alpg_aclk_drv1 <= cfg_alpg_aclk1_bus;
-    cfg_alpg_bclk_drv1 <= cfg_alpg_cclk1_bus;
-    cfg_alpg_cclk_drv1 <= cfg_alpg_bclk1_bus; 
+    cfg_alpg_bclk_drv1 <= cfg_alpg_bclk1_bus;
+    cfg_alpg_cclk_drv1 <= cfg_alpg_cclk1_bus; 
   end
 end
 
@@ -248,20 +251,20 @@ begin
   if(io_timing_sel == 'd1)
   begin
     cfg_alpg_aclk_io <= cfg_alpg_aclk2_bus;
-    cfg_alpg_bclk_io <= cfg_alpg_cclk2_bus;
-    cfg_alpg_cclk_io <= cfg_alpg_bclk2_bus;
+    cfg_alpg_bclk_io <= cfg_alpg_bclk2_bus;
+    cfg_alpg_cclk_io <= cfg_alpg_cclk2_bus;
   end
   else if(io_timing_sel == 'd2)
   begin
     cfg_alpg_aclk_io <= cfg_alpg_aclk3_bus;
-    cfg_alpg_bclk_io <= cfg_alpg_cclk3_bus;
-    cfg_alpg_cclk_io <= cfg_alpg_bclk3_bus;    
+    cfg_alpg_bclk_io <= cfg_alpg_bclk3_bus;
+    cfg_alpg_cclk_io <= cfg_alpg_cclk3_bus;    
   end
   else
   begin
     cfg_alpg_aclk_io <= cfg_alpg_aclk1_bus;
-    cfg_alpg_bclk_io <= cfg_alpg_cclk1_bus;
-    cfg_alpg_cclk_io <= cfg_alpg_bclk1_bus; 
+    cfg_alpg_bclk_io <= cfg_alpg_bclk1_bus;
+    cfg_alpg_cclk_io <= cfg_alpg_cclk1_bus; 
   end
 end
 
@@ -1261,54 +1264,100 @@ endgenerate
 //=====================================================
 //-----------msta/psta gen-----------
 //=====================================================
+reg [DDR_AW-1:0] dum_addr     = 'd0;
+reg              dum_addr_vld = 'd0;
+reg [DDR_AW-1:0] pm_addr      = 'd0;
+reg              pm_addr_vld  = 'd0;
+
 always @(posedge clk) 
 begin
-  if(pattern_reg_a0 == 'd6)
+  if(pat_func_data_vld)
   begin
-    dum_addr <= pat_func_data[REG_DW*3+REG_SEL_DW*3-1:REG_DW*3+REG_SEL_DW*2];
+    dum_addr_vld <= 'd1;
+
+    if(pattern_reg_a0 == 'd6)
+    begin
+      dum_addr <= pat_func_data[REG_DW*3+REG_SEL_DW*3-1:REG_DW*3+REG_SEL_DW*2];
+    end
+    else if(pattern_reg_a1 == 'd6)
+    begin
+      dum_addr <= pat_func_data[REG_DW*3+REG_SEL_DW*2-1:REG_DW*3+REG_SEL_DW];
+    end
+    else if(pattern_reg_a2 == 'd6)
+    begin
+      dum_addr <= pat_func_data[REG_DW*3+REG_SEL_DW-1:REG_DW*3];
+    end
+    else if(((pattern_cmd >= 'd4) && (pattern_cmd <'d8)) || (pattern_cmd == 'd9))
+    begin
+      dum_addr <= dum_addr + 'd1;
+    end
+    else 
+    begin
+      dum_addr <= dum_addr;
+    end
   end
-  else if(pattern_reg_a1 == 'd6)
+  else
   begin
-    dum_addr <= pat_func_data[REG_DW*3+REG_SEL_DW*2-1:REG_DW*3+REG_SEL_DW];
-  end
-  else if(pattern_reg_a2 == 'd6)
-  begin
-    dum_addr <= pat_func_data[REG_DW*3+REG_SEL_DW-1:REG_DW*3];
-  end
-  else if(((pattern_cmd >= 'd4) && (pattern_cmd <'d8)) || (pattern_cmd == 'd9))
-  begin
-    dum_addr <= dum_addr + 'd1;
-  end
-  else 
-  begin
+    dum_addr_vld <= 'd0;
     dum_addr <= dum_addr;
   end
 end
 
 always @(posedge clk) 
 begin
-  if(pattern_reg_a0 == 'd7) 
+  if(pat_func_data_vld)
   begin
-    pm_addr <= pat_func_data[REG_DW*3+REG_SEL_DW*3-1:REG_DW*3+REG_SEL_DW*2];
+    pm_addr_vld <= 'd1;
+
+    if(pattern_reg_a0 == 'd7) 
+    begin
+      pm_addr <= pat_func_data[REG_DW*3+REG_SEL_DW*3-1:REG_DW*3+REG_SEL_DW*2];
+    end
+    else if(pattern_reg_a1 == 'd7)
+    begin
+      pm_addr <= pat_func_data[REG_DW*3+REG_SEL_DW*2-1:REG_DW*3+REG_SEL_DW];
+    end
+    else if(pattern_reg_a2 == 'd7)
+    begin
+      pm_addr <= pat_func_data[REG_DW*3+REG_SEL_DW-1:REG_DW*3];
+    end
+    else if(((pattern_cmd == 'd1) || (pattern_cmd == 'd6)) && ((pattern_reg_b0 == 'd74) || (pattern_reg_b1 == 'd74) || (pattern_reg_b2 == 'd74)))
+    begin
+      pm_addr <= pm_addr + 'd1;
+    end
+    else 
+    begin
+      pm_addr <= pm_addr;
+    end
   end
-  else if(pattern_reg_a1 == 'd7)
+  else
   begin
-    pm_addr <= pat_func_data[REG_DW*3+REG_SEL_DW*2-1:REG_DW*3+REG_SEL_DW];
-  end
-  else if(pattern_reg_a2 == 'd7)
-  begin
-    pm_addr <= pat_func_data[REG_DW*3+REG_SEL_DW-1:REG_DW*3];
-  end
-  else if(((pattern_cmd == 'd1) || (pattern_cmd == 'd6)) && ((pattern_reg_b0 == 'd74) || (pattern_reg_b1 == 'd74) || (pattern_reg_b2 == 'd74)))
-  begin
-    pm_addr <= pm_addr + 'd1;
-  end
-  else 
-  begin
+    pm_addr_vld <= 'd0;
     pm_addr <= pm_addr;
   end
 end
 
+always @(posedge clk) 
+begin
+  if(dum_addr_vld)
+  begin
+    rd_ddr_addr <= dum_addr;
+  end
+  else
+  begin
+    rd_ddr_addr <= pm_addr;
+  end
+end
+
+always @(posedge clk) 
+begin
+  rd_ddr_req <= dum_addr_vld || pm_addr_vld;
+end
+
+always @(posedge clk) 
+begin
+  rd_ddr_addr_vld <= rd_ddr_req;
+end
 //=====================================================
 //-----------dio gen-----------
 //=====================================================
@@ -1331,11 +1380,11 @@ generate
         end
         else if(pattern_regb_bus[(i+1)*REG_DW-1:i*REG_DW] == 'd74)
         begin
-          d_reg_pre_bus[(i+1)*BYTE_DW-1:i*BYTE_DW] <= pm_data;
+          d_reg_pre_bus[(i+1)*BYTE_DW-1:i*BYTE_DW] <= rd_ddr_data;
         end
         else if(pattern_regb_bus[(i+1)*REG_DW-1:i*REG_DW] == 'd75)
         begin
-          d_reg_pre_bus[(i+1)*BYTE_DW-1:i*BYTE_DW] <= ~pm_data;
+          d_reg_pre_bus[(i+1)*BYTE_DW-1:i*BYTE_DW] <= ~rd_ddr_data;
         end
         else if(pattern_regb_bus[(i+1)*REG_DW-1:i*REG_DW] < 'd84)
         begin
@@ -1383,7 +1432,7 @@ begin
   end  
   else if(pattern_cmd == 'd5)
   begin
-    d_reg <= dum_data;
+    d_reg <= rd_ddr_data;
   end  
   else
   begin
