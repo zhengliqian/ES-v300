@@ -36,7 +36,7 @@ module alpg_data_gen
     input                                pat_c_clk                     ,
     input                                pat_drv_en                    ,
     //output pin
-    output [PE_DUT-1:0]                  pat_dout_bus                   
+    (*mark_debug="true"*)(*keep="true"*)output reg                           pat_dout        = 'd0          
 );
 
 reg  pat_a_clk_d1 = 'd0 ;
@@ -45,7 +45,7 @@ reg  pat_c_clk_d1 = 'd0 ;
 wire pat_a_clk_r        ;
 wire pat_b_clk_r        ;
 wire pat_c_clk_r        ;
-reg  pat_dout     = 'd0 ;
+//reg  pat_dout     = 'd0 ;
 
 always @(posedge clk) 
 begin
@@ -183,6 +183,6 @@ begin
   end
 end
 
-assign pat_dout_bus = {PE_DUT{pat_dout}};
+//assign pat_dout_bus = {PE_DUT{pat_dout}};
 
 endmodule
