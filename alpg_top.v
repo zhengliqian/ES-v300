@@ -19,12 +19,18 @@
 //////////////////////////////////////////////////////////////////////////////////
 module alpg_top
 #(
-     localparam GT_LANE    = 4 ,
-     localparam CFG_NUM_DW = 9
+     parameter GT_LANE    = 4  ,
+     parameter CFG_NUM_DW = 9  ,
+     parameter PE_DUT     = 16
 ) 
 (
     input                   fpga_clk_p     ,   
     input                   fpga_clk_n     ,
+    //PE IO
+    input  [PE_DUT-1:0]     dut_din        ,
+    output [PE_DUT-1:0]     pat_drv0_bus   ,
+    output [PE_DUT-1:0]     pat_drv1_bus   ,
+    output [PE_DUT-1:0]     pat_dio_bus    ,
     //GT         
     input                   gtp_ref_clkp   ,
     input                   gtp_ref_clkn   ,
@@ -62,7 +68,7 @@ module alpg_top
 assign rx_pck_suspend = 'd0;
 assign alpg_rdy       = 'd0;
 
-localparam  DDR_AW         = 32   ;
+localparam  DDR_AW         = 18   ;
 localparam  DDR_DW         = 32   ;
 localparam  DATA_WIDTH     = 256  ; 
 localparam  TIMING_DW      = 22   ;
@@ -109,8 +115,6 @@ wire                gt_sys_clk        ;
 //begin
 //  test_gpio_d1 <= gpio_test;
 //end
-
-assign alpg_done = 'd0;
 
 alpg_clk_core # (
   .TIMING_DW(TIMING_DW)
@@ -311,30 +315,10 @@ wire [FBC_SUM_DW*DUT_NUM-1:0] alpg_fbc_dut_bus   ;
 wire                          alpg_fsr           ;
 wire                          alpg_mflg          ;
 
+//fake data for test
 wire fack_stop;
 reg fack_stop_d1 = 'd0;
 wire fack_stop_r;
-
-//always @(posedge sys_clk) 
-//begin
-//  if(alpg_start || alpg_restart)
-//  begin
-//    alpg_work_busy <= 'd1;
-//  end
-//  else if(fack_stop_r)
-//  begin
-//    alpg_work_busy <= 'd0;
-//  end
-//  else
-//  begin
-//    alpg_work_busy <= alpg_work_busy;
-//  end  
-//end
-
-//vio_1 u_stop (
-//  .clk(sys_clk),                // input wire clk
-//  .probe_out0(fack_stop)  // output wire [0 : 0] probe_out0
-//);
 
 vio_1 u_vio_top (
   .clk(sys_clk),                // input wire clk
@@ -457,212 +441,261 @@ assign gtx_cfg_vld  = rx_data_vld_bus[0]                     ;
 assign tx_data_bus[GT_LANE_DW-1:0]            = gtp_cfg_addr ;
 assign tx_data_bus[2*GT_LANE_DW-1:GT_LANE_DW] = gtp_cfg_data ;
 
+localparam  CMD_DW = 4;
+localparam  MUX_DW = 4;
+localparam  OPR_DW = 3;
+localparam  AS_MAP_DW = 24;
+localparam  BYTE_DW = 8;
+localparam  REG_NUM = 3;
+localparam  REG_SEL_DW = 7;
 
-wire init_start;
-wire init_done ;
+wire                ui_clk              ;
+wire [DDR_DW-1:0]   ddr_wr_data         ;
+wire                ddr_wr_data_vld     ;
+wire [DDR_AW-1:0]   ddr_wr_addr         ;
+wire                ddr_wr_addr_vld     ;
+wire                ddr_wr_addr_vld_last;
+wire                ddr_rd_fifo_full    ;
+wire                ddr_wr_done         ;
+wire [DDR_AW-1:0]   ddr_rd_addr         ;
+wire                ddr_rd_addr_vld     ;
+wire                ddr_rd_addr_vld_last;
+wire                ddr_task_rdy        ;
+wire [DDR_DW-1:0]   ddr_rd_data         ;
+wire                ddr_rd_data_vld     ;
+wire                ddr_rd_done         ;
+wire                alpg_dps_start          ;
+wire                mflg_reg                ;
+wire                pat_wr_req              ;
+wire [DDR_AW-1:0]   pat_wr_ddr_addr         ;
+wire                pat_wr_ddr_addr_vld     ;
+wire                pat_wr_ddr_addr_vld_last;
+wire [DDR_DW-1:0]   pat_wr_ddr_data         ;
+wire                pat_wr_ddr_data_vld     ;
+wire                ck_out                  ;
+wire                we_out                  ;
+wire [CMD_DW-1:0]   pattern_cmd             ;
+wire                pattern_me              ;
+wire [MSKTB_DW-1:0] pattern_msktb           ;
+wire [BYTE_DW-1:0]  d_reg                   ;
+wire                pattern_dio             ;
+wire                dfx_pattern_func        ;
 
-alpg_ctrl_mst  alpg_ctrl_mst_inst (
-  .clk           (sys_clk       ),
-  .rst           (sys_rst       ),
-  .alpg_start    (alpg_start    ),
-  .alpg_restart  (alpg_restart  ),
-  .alpg_stop     (fack_stop_r     ),
-  //.alpg_stop     (alpg_stop     ),
-  .alpg_work_busy(alpg_work_busy),
-  .alpg_done     (alpg_done     ),
-  .init_start    (init_start    ),
-  .init_done     (init_done     )
-);
+wire [(GT_LANE/2)*GT_LANE_DW-1:0]  ddr_gt_tx_data    ;
+wire [GT_LANE/2-1:0]               ddr_gt_tx_data_vld;
+wire [(GT_LANE/2)*GT_LANE_DW-1:0]  ddr_gt_rx_data    ;
+wire [GT_LANE/2-1:0]               ddr_gt_rx_data_vld;
 
-// Parameters
-localparam  PROTCL_LEN   = 5  ;
-localparam  IDX_DW       = 32 ;
-localparam  REG_NUM      = 16 ;
+assign tx_data_bus[GT_LANE*GT_LANE_DW-1:(GT_LANE/2)*GT_LANE_DW] = ddr_gt_tx_data;
+assign tx_data_vld_bus[GT_LANE-1:GT_LANE/2] = ddr_gt_tx_data_vld;
+assign ddr_gt_rx_data = rx_data_bus[GT_LANE*GT_LANE_DW-1:(GT_LANE/2)*GT_LANE_DW];
+assign ddr_gt_rx_data_vld = rx_data_vld_bus[GT_LANE-1:GT_LANE/2];
 
-//Ports
-wire [GT_LANE_DW-1:0]               gt_rx_data2       ;
-wire [GT_LANE_DW-1:0]               gt_rx_data3       ;
-wire                                gt_rx_data_vld    ;
-wire                                mflg_reg          ;
-wire                                clk_base          ;
-wire [PROTCL_LEN * GT_LANE_DW-1:0]  pat_func_data     ;
-wire                                pat_func_data_vld ;
-wire                                dfx_pattern_func  ;
-
-assign gt_rx_data2    = rx_data_bus[3*GT_LANE_DW-1:2*GT_LANE_DW];
-assign gt_rx_data3    = rx_data_bus[4*GT_LANE_DW-1:3*GT_LANE_DW];
-assign gt_rx_data_vld = rx_data_vld_bus[2];
-
-alpg_pat_task # (
-  .GT_LANE_DW   (GT_LANE_DW   ),
-  .PROTCL_LEN   (PROTCL_LEN   ),
-  .PC_DW        (PC_DW        ),
-  .DATA_TYPE_DW (DATA_TYPE_DW ),
-  .IDX_DW       (INDX_DW      ),
-  .REG_NUM      (REG_NUM      ),
-  .RATE_DW      (RATE_DW      ),
-  .AS_DW        (AS_DW        ),
-  .AFM_DW       (AFM_DW       ),
-  .AFM_NUM      (AFM_NUM      )
+alpg_ctrl_core # (
+  .GT_LANE_DW    (GT_LANE_DW     ),
+  .GT_DATA_LANE  (GT_LANE/2      ),
+  .DATA_NUM_DW   (DATA_NUM_DW    ),
+  .MEM_COPR_DW   (MEM_COPR_DW    ),
+  .PC_DW         (PC_DW          ),
+  .DATA_TYPE_DW  (DATA_TYPE_DW   ),
+  .IDX_DW        (INDX_DW        ),
+  .FMT_NUM       (FMT_NUM        ),
+  .TREG_NUM      (REG_NUM0       ),
+  .RATE_DW       (RATE_DW        ),
+  .TIMING_DW     (TIMING_DW      ),
+  .CMD_DW        (CMD_DW         ),
+  .MUX_DW        (MUX_DW         ),
+  .OPR_DW        (OPR_DW         ),
+  .MSKTB_DW      (MSKTB_DW       ),
+  .X_AW          (X_AW           ),
+  .Y_AW          (Y_AW           ),
+  .Z_AW          (Z_AW           ),
+  .TP_DW         (TP_DW          ),
+  .MSTA_DW       (MSTA_DW        ),
+  .PSTA_DW       (PSTA_DW        ),
+  .AS_MAP_DW     (AS_MAP_DW      ),
+  .DDR_DW        (DDR_DW         ),
+  .DDR_AW        (DDR_AW         ),
+  .BYTE_DW       (BYTE_DW        ),
+  .REG_NUM0      (REG_NUM0       ),
+  .REG_NUM1      (REG_NUM1       ),
+  .REG_NUM2      (REG_NUM2       ),
+  .REG_NUM       (REG_NUM        ),
+  .REG_SEL_DW    (REG_SEL_DW     ),
+  .REG_DW        (REG_DW         )
 )
-alpg_pat_task_inst (
-  .clk                 (sys_clk             ),
-  .rst                 (sys_rst             ),
-  .gt_clk              (gt_usrclk           ),
-  .cfg_alpg_data_type  (cfg_alpg_data_type  ),
-  .cfg_alpg_start_pc   (alpg_start_pc       ),
-  .cfg_alpg_cflg       (cfg_alpg_cflg       ),
-  .cfg_alpg_indx_bus   (cfg_alpg_indx_bus   ),
-  .rx_data_sof         (rx_data_sof         ),
-  .rx_data_eof         (rx_data_eof         ),
-  .gt_rx_data2         (gt_rx_data2         ),
-  .gt_rx_data3         (gt_rx_data3         ),
-  .gt_rx_data_vld      (gt_rx_data_vld      ),
-  .alpg_start          (init_done           ),
-  .alpg_restart        (alpg_restart        ),
-  .alpg_stop           (alpg_stop           ),
-  .mflg_reg            (mflg_reg            ),
-  .clk_base            (base_rate_clk       ),
-  .pat_func_data       (pat_func_data       ),
-  .pat_func_data_vld   (pat_func_data_vld   ),
-  .dfx_pattern_func    (dfx_pattern_func    )
+alpg_ctrl_core_inst (
+  .clk                     (sys_clk                 ),
+  .rst                     (sys_rst                 ),
+  .gt_clk                  (gt_clk                  ),
+  .alpg_start              (alpg_start              ),
+  .alpg_restart            (alpg_restart            ),
+  .alpg_stop               (alpg_stop               ),
+  .alpg_work_busy          (alpg_work_busy          ),
+  .alpg_done               (alpg_done               ),
+  .alpg_wr_start           (alpg_wr_start           ),
+  .alpg_rd_start           (alpg_rd_start           ),
+  .alpg_mem_rst            (alpg_mem_rst            ),
+  .alpg_mem_copy           (alpg_mem_copy           ),
+  .cfg_alpg_data_type      (cfg_alpg_data_type      ),
+  .cfg_alpg_start_pc       (cfg_alpg_start_pc       ),
+  .cfg_alpg_cflg           (cfg_alpg_cflg           ),
+  .cfg_alpg_indx_bus       (cfg_alpg_indx_bus       ),
+  .cfg_alpg_fmt_c0         (cfg_alpg_fmt_c0         ),
+  .cfg_alpg_fmt_c1         (cfg_alpg_fmt_c1         ),
+  .cfg_alpg_fmt_d0         (cfg_alpg_fmt_d0         ),
+  .cfg_alpg_rate_bus       (cfg_alpg_rate_bus       ),
+  .cfg_alpg_aclk1_bus      (cfg_alpg_aclk1_bus      ),
+  .cfg_alpg_cclk1_bus      (cfg_alpg_cclk1_bus      ),
+  .cfg_alpg_bclk1_bus      (cfg_alpg_bclk1_bus      ),
+  .cfg_alpg_aclk2_bus      (cfg_alpg_aclk2_bus      ),
+  .cfg_alpg_bclk2_bus      (cfg_alpg_bclk2_bus      ),
+  .cfg_alpg_cclk2_bus      (cfg_alpg_cclk2_bus      ),
+  .cfg_alpg_aclk3_bus      (cfg_alpg_aclk3_bus      ),
+  .cfg_alpg_bclk3_bus      (cfg_alpg_bclk3_bus      ),
+  .cfg_alpg_cclk3_bus      (cfg_alpg_cclk3_bus      ),
+  .cfg_alpg_dre_r_bus      (cfg_alpg_dre_r_bus      ),
+  .cfg_alpg_dre_f_bus      (cfg_alpg_dre_f_bus      ),
+  .cfg_alpg_strb_bus       (cfg_alpg_strb_bus       ),
+  .cfg_alpg_msktb          (cfg_alpg_msktb          ),
+  .cfg_alpg_x              (cfg_alpg_x              ),
+  .cfg_alpg_y              (cfg_alpg_y              ),
+  .cfg_alpg_z              (cfg_alpg_z              ),
+  .cfg_alpg_tp             (cfg_alpg_tp             ),
+  .cfg_alpg_me             (cfg_alpg_me             ),
+  .cfg_alpg_psta           (cfg_alpg_psta           ),
+  .cfg_alpg_msta           (cfg_alpg_msta           ),
+  .cfg_alpg_tph_bus        (cfg_alpg_tph_bus        ),
+  .cfg_alpg_dreg_bus       (cfg_alpg_dreg_bus       ),
+  .cfg_alpg_qreg_bus       (cfg_alpg_qreg_bus       ),
+  .cfg_alpg_preg_bus       (cfg_alpg_preg_bus       ),
+  .cfg_alpg_ash_bus        (cfg_alpg_ash_bus        ),
+  .cfg_alpg_asl_bus        (cfg_alpg_asl_bus        ),
+  .cfg_alpg_mem_copr       (cfg_alpg_mem_copr       ),
+  .cfg_alpg_addr_d0        (cfg_alpg_addr_d0        ),
+  .cfg_alpg_addr_d1        (cfg_alpg_addr_d1        ),
+  .cfg_alpg_addr_p         (cfg_alpg_addr_p         ),
+  .cfg_alpg_mem_size       (cfg_alpg_mem_size       ),
+  .cfg_alpg_base_addr      (cfg_alpg_base_addr      ),
+  .cfg_alpg_data_num       (cfg_alpg_data_num       ),
+  .rx_data_sof             (rx_data_sof             ),
+  .rx_data_eof             (rx_data_eof             ),
+  .rx_data_bus             (ddr_gt_rx_data          ),
+  .rx_data_vld_bus         (ddr_gt_rx_data_vld      ),
+  .tx_data_bus             (ddr_gt_tx_data          ),
+  .tx_data_vld_bus         (ddr_gt_tx_data_vld      ),
+  .ui_clk                  (ui_clk                  ),
+  .ddr_wr_data             (ddr_wr_data             ),
+  .ddr_wr_data_vld         (ddr_wr_data_vld         ),
+  .ddr_wr_addr             (ddr_wr_addr             ),
+  .ddr_wr_addr_vld         (ddr_wr_addr_vld         ),
+  .ddr_wr_addr_vld_last    (ddr_wr_addr_vld_last    ),
+  .ddr_rd_fifo_full        (ddr_rd_fifo_full        ),
+  .ddr_wr_done             (ddr_wr_done             ),
+  .ddr_rd_addr             (ddr_rd_addr             ),
+  .ddr_rd_addr_vld         (ddr_rd_addr_vld         ),
+  .ddr_rd_addr_vld_last    (ddr_rd_addr_vld_last    ),
+  .ddr_task_rdy            (ddr_task_rdy            ),
+  .ddr_rd_data             (ddr_rd_data             ),
+  .ddr_rd_data_vld         (ddr_rd_data_vld         ),
+  .ddr_rd_done             (ddr_rd_done             ),
+  .alpg_dps_start          (alpg_dps_start          ),
+  .base_rate_clk           (base_rate_clk           ),
+  .pat_data_parse_vld      (pat_data_parse_vld      ),
+  .pattern_data_rate       (pattern_data_rate       ),
+  .pattern_a_clk_drv0      (pattern_a_clk_drv0      ),
+  .pattern_b_clk_drv0      (pattern_b_clk_drv0      ),
+  .pattern_c_clk_drv0      (pattern_c_clk_drv0      ),
+  .pattern_a_clk_drv1      (pattern_a_clk_drv1      ),
+  .pattern_b_clk_drv1      (pattern_b_clk_drv1      ),
+  .pattern_c_clk_drv1      (pattern_c_clk_drv1      ),
+  .pattern_a_clk_io        (pattern_a_clk_io        ),
+  .pattern_b_clk_io        (pattern_b_clk_io        ),
+  .pattern_c_clk_io        (pattern_c_clk_io        ),
+  .pattern_drv_r           (pattern_drv_r           ),
+  .pattern_drv_f           (pattern_drv_f           ),
+  .pattern_strb            (pattern_strb            ),
+  .mflg_reg                (mflg_reg                ),
+  .pat_wr_req              (pat_wr_req              ),
+  .pat_wr_ddr_addr         (pat_wr_ddr_addr         ),
+  .pat_wr_ddr_addr_vld     (pat_wr_ddr_addr_vld     ),
+  .pat_wr_ddr_addr_vld_last(pat_wr_ddr_addr_vld_last),
+  .pat_wr_ddr_data         (pat_wr_ddr_data         ),
+  .pat_wr_ddr_data_vld     (pat_wr_ddr_data_vld     ),
+  .ck_out                  (ck_out                  ),
+  .we_out                  (we_out                  ),
+  .pattern_cmd             (pattern_cmd             ),
+  .pattern_me              (pattern_me              ),
+  .pattern_msktb           (pattern_msktb           ),
+  .d_reg                   (d_reg                   ),
+  .pattern_dio             (pattern_dio             ),
+  .dfx_pattern_func        (dfx_pattern_func        )
 );
 
 
-// Parameters
-localparam  TREG_NUM          = 8  ;
-localparam  CMD_DW            = 4  ;
-localparam  MUX_DW            = 4  ;
-localparam  OPR_DW            = 3  ;
-localparam  AS_MAP_DW         = 24 ;
-localparam  BYTE_DW           = 8  ;
-localparam  REG_SEL_DW        = 7  ;
-localparam  REG_NUM_PAT       = 3  ;
-//Ports
-wire [PSTA_DW-1:0]                 pm_addr           ;
-wire [DDR_DW-1:0]                  pm_data           ;
-wire [MSTA_DW-1:0]                 dum_addr          ;
-wire [DDR_DW-1:0]                  dum_data          ;
-wire                               alpg_dps_start    ;
-wire                               pattern_ck        ;
-wire                               pattern_we        ;
-wire [CMD_DW-1:0]                  pattern_cmd       ;
-wire                               pattern_me        ;
-wire [MSKTB_DW-1:0]                pattern_msktb     ;
-wire                               pattern_dio       ;
+wire [PE_DUT-1:0] pattern_data_bus;
+wire [BYTE_DW*PE_DUT-1:0] d_reg_bus;
+wire [4*DDR_DW-1:0] dum_data;
 
-alpg_data_prase # (
-  .GT_LANE_DW  (GT_LANE_DW  ),
-  .PROTCL_LEN  (PROTCL_LEN  ),
-  .FMT_NUM     (FMT_NUM     ),
-  .TREG_NUM    (TREG_NUM    ),
-  .RATE_DW     (RATE_DW     ),
-  .TIMING_DW   (TIMING_DW   ),
-  .CMD_DW      (CMD_DW      ),
-  .MUX_DW      (MUX_DW      ),
-  .OPR_DW      (OPR_DW      ),
-  .MSKTB_DW    (MSKTB_DW    ),
-  .X_AW        (X_AW        ),
-  .Y_AW        (Y_AW        ),
-  .Z_AW        (Z_AW        ),
-  .TP_DW       (TP_DW       ),
-  .MSTA_DW     (MSTA_DW     ),
-  .PSTA_DW     (PSTA_DW     ),
-  .AS_MAP_DW   (AS_MAP_DW   ),
-  .DDR_DW      (DDR_DW      ),
-  .BYTE_DW     (BYTE_DW     ),
-  .REG_NUM0    (REG_NUM0    ),
-  .REG_NUM1    (REG_NUM1    ),
-  .REG_NUM2    (REG_NUM2    ),
-  .REG_NUM     (REG_NUM_PAT     ),
-  .REG_SEL_DW  (REG_SEL_DW  ),
-  .REG_DW      (REG_DW      )
+assign pattern_data_bus = {PE_DUT{pattern_dio}};
+assign d_reg_bus        = {PE_DUT{d_reg}};
+
+alpg_pat_core # (
+  .FMT_NUM   (FMT_NUM   ),
+  .PE_DUT    (PE_DUT    ),
+  .BYTE_DW   (BYTE_DW   ),
+  .MOD_DW    (MOD_DW    ),
+  .MSKTB_DW  (MSKTB_DW  ),
+  .CMD_DW    (CMD_DW    ),
+  .FBC_SUM_DW(FBC_SUM_DW),
+  .DDR_AW    (DDR_AW    ),
+  .DDR_DW    (DDR_DW    )
 )
-alpg_data_prase_inst (
-  .clk                 (sys_clk             ),
-  .rst                 (sys_rst             ),
-  .alpg_start          (alpg_start          ),
-  .alpg_done           (alpg_done           ),
-  .init_start          (init_start          ),
-  .init_done           (init_done           ),
-  .base_rate_clk       (base_rate_clk       ),
-  .pat_func_data       (pat_func_data       ),
-  .pat_func_data_vld   (pat_func_data_vld   ),
-  .rd_ddr_req          (rd_ddr_req          ),
-  .rd_ddr_addr         (rd_ddr_addr         ),
-  .rd_ddr_addr_vld     (rd_ddr_addr_vld     ),
-  .rd_ddr_addr_vld_last(rd_ddr_addr_vld_last),
-  .rd_ddr_data         (rd_ddr_data         ),
-  .rd_ddr_data_vld     (rd_ddr_data_vld     ),
-  .cfg_alpg_fmt_c0     (cfg_alpg_fmt_c0     ),
-  .cfg_alpg_fmt_c1     (cfg_alpg_fmt_c1     ),
-  .cfg_alpg_fmt_d0     (cfg_alpg_fmt_d0     ),
-  .cfg_alpg_rate_bus   (cfg_alpg_rate_bus   ),
-  .cfg_alpg_aclk1_bus  (cfg_alpg_aclk1_bus  ),
-  .cfg_alpg_cclk1_bus  (cfg_alpg_cclk1_bus  ),
-  .cfg_alpg_bclk1_bus  (cfg_alpg_bclk1_bus  ),
-  .cfg_alpg_aclk2_bus  (cfg_alpg_aclk2_bus  ),
-  .cfg_alpg_bclk2_bus  (cfg_alpg_bclk2_bus  ),
-  .cfg_alpg_cclk2_bus  (cfg_alpg_cclk2_bus  ),
-  .cfg_alpg_aclk3_bus  (cfg_alpg_aclk3_bus  ),
-  .cfg_alpg_bclk3_bus  (cfg_alpg_bclk3_bus  ),
-  .cfg_alpg_cclk3_bus  (cfg_alpg_cclk3_bus  ),
-  .cfg_alpg_dre_r_bus  (cfg_alpg_dre_r_bus  ),
-  .cfg_alpg_dre_f_bus  (cfg_alpg_dre_f_bus  ),
-  .cfg_alpg_strb_bus   (cfg_alpg_strb_bus   ),
-  .cfg_alpg_msktb      (cfg_alpg_msktb      ),
-  .cfg_alpg_x          (cfg_alpg_x          ),
-  .cfg_alpg_y          (cfg_alpg_y          ),
-  .cfg_alpg_z          (cfg_alpg_z          ),
-  .cfg_alpg_tp         (cfg_alpg_tp         ),
-  .cfg_alpg_me         (cfg_alpg_me         ),
-  .cfg_alpg_psta       (cfg_alpg_psta       ),
-  .cfg_alpg_msta       (cfg_alpg_msta       ),
-  .cfg_alpg_tph_bus    (cfg_alpg_tph_bus    ),
-  .cfg_alpg_dreg_bus   (cfg_alpg_dreg_bus   ),
-  .cfg_alpg_qreg_bus   (cfg_alpg_qreg_bus   ),
-  .cfg_alpg_preg_bus   (cfg_alpg_preg_bus   ),
-  .cfg_alpg_ash_bus    (cfg_alpg_ash_bus    ),
-  .cfg_alpg_asl_bus    (cfg_alpg_asl_bus    ),
-  .alpg_dps_start      (alpg_dps_start      ),
-  .pat_data_parse_vld  (pat_data_parse_vld  ),
-  .pattern_data_rate   (pattern_data_rate   ),
-  .pattern_a_clk_drv0  (pattern_a_clk_drv0  ),
-  .pattern_b_clk_drv0  (pattern_b_clk_drv0  ),
-  .pattern_c_clk_drv0  (pattern_c_clk_drv0  ),
-  .pattern_a_clk_drv1  (pattern_a_clk_drv1  ),
-  .pattern_b_clk_drv1  (pattern_b_clk_drv1  ),
-  .pattern_c_clk_drv1  (pattern_c_clk_drv1  ),
-  .pattern_a_clk_io    (pattern_a_clk_io    ),
-  .pattern_b_clk_io    (pattern_b_clk_io    ),
-  .pattern_c_clk_io    (pattern_c_clk_io    ),
-  .pattern_drv_r       (pattern_drv_r       ),
-  .pattern_drv_f       (pattern_drv_f       ),
-  .pattern_strb        (pattern_strb        ),
-  .ck_out              (pattern_ck          ),
-  .we_out              (pattern_we          ),
-  .pattern_cmd         (pattern_cmd         ),
-  .pattern_me          (pattern_me          ),
-  .pattern_msktb       (pattern_msktb       ),
-  .d_reg               (d_reg               ),
-  .pattern_dio         (pattern_dio         )
+alpg_pat_core_inst (
+  .clk                     (sys_clk                 ),
+  .rst                     (sys_rst                 ),
+  .alpg_start              (alpg_start              ),
+  .alpg_work_busy          (alpg_work_busy          ),
+  .cfg_alpg_fmt_c0         (cfg_alpg_fmt_c0         ),
+  .cfg_alpg_fmt_c1         (cfg_alpg_fmt_c1         ),
+  .cfg_alpg_fmt_d0         (cfg_alpg_fmt_d0         ),
+  .cfg_alpg_run_mod        (cfg_alpg_run_mod        ),
+  .cfg_alpg_msktb          (cfg_alpg_msktb          ),
+  .cfg_alpg_me             (cfg_alpg_me             ),
+  .pattern_data_bus        (pattern_data_bus        ),
+  .pattern_we              (we_out                  ),
+  .pattern_ck              (ck_out                  ),
+  .pat_data_parse_vld      (pat_data_parse_vld      ),
+  .d_reg_bus               (d_reg_bus               ),
+  .pattern_cmd             (pattern_cmd             ),
+  .pattern_me              (pattern_me              ),
+  .pattern_msktb           (pattern_msktb           ),
+  .mflg_reg                (mflg_reg                ),
+  .dum_data                (dum_data                ),
+  .base_rate_clk           (base_rate_clk           ),
+  .strb_pluse              (strb_pluse              ),
+  .pat_a_clk_d0            (pat_a_clk_d0            ),
+  .pat_b_clk_d0            (pat_b_clk_d0            ),
+  .pat_c_clk_d0            (pat_c_clk_d0            ),
+  .pat_a_clk_d1            (pat_a_clk_d1            ),
+  .pat_b_clk_d1            (pat_b_clk_d1            ),
+  .pat_c_clk_d1            (pat_c_clk_d1            ),
+  .pat_a_clk_io            (pat_a_clk_io            ),
+  .pat_b_clk_io            (pat_b_clk_io            ),
+  .pat_c_clk_io            (pat_c_clk_io            ),
+  .pat_drv_r               (pat_drv_r               ),
+  .pat_drv_f               (pat_drv_f               ),
+  .pat_wr_req              (pat_wr_req              ),
+  .pat_wr_ddr_addr         (pat_wr_ddr_addr         ),
+  .pat_wr_ddr_addr_vld     (pat_wr_ddr_addr_vld     ),
+  .pat_wr_ddr_addr_vld_last(pat_wr_ddr_addr_vld_last),
+  .pat_wr_ddr_data         (pat_wr_ddr_data         ),
+  .pat_wr_ddr_data_vld     (pat_wr_ddr_data_vld     ),
+  .dut_din                 (dut_din                 ),
+  .pat_drv0_bus            (pat_drv0_bus            ),
+  .pat_drv1_bus            (pat_drv1_bus            ),
+  .pat_dio_bus             (pat_dio_bus             )
 );
-
-wire               ui_clk                         ;
-wire               ddr_wr_req                     ;
-wire               ddr_wr_done                    ;
-wire               wr_fifo_prog_full              ;
-wire  [DDR_AW-1:0] ddr_wr_base_addr               ;           
-wire  [DDR_AW-1:0] ddr_wr_data_num                ;
-wire  [DDR_DW-1:0] ddr_wr_data                    ;
-reg                ddr_wr_data_vld        = 'd0   ;
-wire               ddr_rd_req                     ;
-wire               ddr_rd_done                    ;
-wire               rd_fifo_empty                  ;
-wire [DDR_AW-1:0]  ddr_rd_base_addr               ;
-wire [DDR_AW-1:0]  ddr_rd_data_num                ;
-wire [DDR_DW-1:0]  ddr_rd_data                    ;
-wire               ddr_rd_data_vld                ; 
 
 ddr3_core#(
   .DDR_AW      ( DDR_AW      )    ,
@@ -726,147 +759,45 @@ vio_0 your_instance_name (
 
 );
 
-reg [31:0] wr_data_cnt = 'd0;
-
-always @(posedge sys_clk) 
-begin
-  ddr_wr_req_flag_d1 <= ddr_wr_req_flag;
-  ddr_rd_req_flag_d1 <= ddr_rd_req_flag;
-end
-
-assign ddr_wr_req = (!ddr_wr_req_flag_d1) && ddr_wr_req_flag;
-assign ddr_rd_req = (!ddr_rd_req_flag_d1) && ddr_rd_req_flag;
-
-always @(posedge sys_clk) 
-begin
-  if(ddr_wr_req)
-  begin
-    ddr_wr_data_vld <= 'd1;
-  end
-  else if(wr_data_cnt == ddr_wr_data_num - 'd1)
-  begin
-    ddr_wr_data_vld <= 'd0;
-  end  
-  else
-  begin
-    ddr_wr_data_vld <= ddr_wr_data_vld;
-  end  
-end
-
-always @(posedge sys_clk) 
-begin
-  if(ddr_wr_data_vld)
-  begin
-    wr_data_cnt <= wr_data_cnt + 'd1;
-  end
-  else
-  begin
-    wr_data_cnt <= 'd0;
-  end  
-end
-
-assign ddr_wr_data = wr_data_cnt;
-//  // Parameters
-//  localparam  GT_DATA_LANE = 0;
-//  localparam  DATA_NUM_DW = 0;
-//  localparam  DATA_TYPE_DW = 0;
-//  localparam  MEM_COPR_DW = 0;
+//reg [31:0] wr_data_cnt = 'd0;
 //
-//  //Ports
-//  reg clk;
-//  reg rst;
-//  reg alpg_wr_start;
-//  reg alpg_rd_start;
-//  reg alpg_mem_rst;
-//  reg alpg_mem_copy;
-//  reg [DDR_AW-1:0] cfg_alpg_base_addr;
-//  reg [DATA_NUM_DW-1:0] cfg_alpg_data_num;
-//  reg [DATA_TYPE_DW-1:0] cfg_alpg_data_type;
-//  reg [MEM_COPR_DW-1:0] cfg_alpg_mem_copr;
-//  reg [DDR_AW-1:0] cfg_alpg_addr_d0;
-//  reg [DDR_AW-1:0] cfg_alpg_addr_d1;
-//  reg [DDR_AW-1:0] cfg_alpg_addr_p;
-//  reg [DATA_NUM_DW-1:0] cfg_alpg_mem_size;
-//  reg rx_data_sof;
-//  reg rx_data_eof;
-//  reg [DATA_NUM_DW-1:0] cfg_rx_data_num;
-//  reg [GT_DATA_LANE*DDR_DW-1:0] rx_data_bus;
-//  reg [GT_DATA_LANE-1:0] rx_data_vld_bus;
-//  reg pat_rd_req;
-//  reg [DDR_AW-1:0] pat_rd_base_addr;
-//  reg [DATA_NUM_DW-1:0] pat_data_num;
-//  reg pat_wr_req;
-//  reg [DDR_AW-1:0] pat_wr_base_addr;
-//  wire ddr_rst;
-//  wire  ddr_wr_req;
-//  reg ddr_wr_done;
-//  reg wr_fifo_prog_full;
-//  wire reg [DDR_AW-1:0] ddr_wr_base_addr;
-//  wire reg [DDR_AW-1:0] ddr_wr_data_num;
-//  wire reg [DDR_DW-1:0] ddr_wr_data;
-//  wire  ddr_wr_data_vld;
-//  wire  ddr_rd_req;
-//  reg ddr_rd_done;
-//  reg rd_fifo_empty;
-//  wire reg [DDR_AW-1:0] ddr_rd_base_addr;
-//  wire reg [DDR_AW-1:0] ddr_rd_data_num;
-//  reg [DDR_DW-1:0] ddr_rd_data;
-//  reg ddr_rd_data_vld;
-//  reg ddr_rst_done;
-//  reg ui_clk;
+//always @(posedge sys_clk) 
+//begin
+//  ddr_wr_req_flag_d1 <= ddr_wr_req_flag;
+//  ddr_rd_req_flag_d1 <= ddr_rd_req_flag;
+//end
 //
-//  alpg_ddr_task # (
-//    .GT_DATA_LANE(GT_DATA_LANE),
-//    .DATA_NUM_DW (DATA_NUM_DW ),
-//    .DATA_TYPE_DW(DATA_TYPE_DW),
-//    .MEM_COPR_DW (MEM_COPR_DW ),
-//    .DDR_AW      (DDR_AW      ),
-//    .DDR_DW      (DDR_DW      )
-//  )
-//  alpg_ddr_task_inst (
-//    .clk               (sys_clk           ),
-//    .rst               (sys_rst           ),
-//    .alpg_wr_start     (alpg_wr_start     ),
-//    .alpg_rd_start     (alpg_rd_start     ),
-//    .alpg_mem_rst      (alpg_mem_rst      ),
-//    .alpg_mem_copy     (alpg_mem_copy     ),
-//    .cfg_alpg_base_addr(cfg_alpg_base_addr),
-//    .cfg_alpg_data_num (cfg_alpg_data_num ),
-//    .cfg_alpg_data_type(cfg_alpg_data_type),
-//    .cfg_alpg_mem_copr (cfg_alpg_mem_copr ),
-//    .cfg_alpg_addr_d0  (cfg_alpg_addr_d0  ),
-//    .cfg_alpg_addr_d1  (cfg_alpg_addr_d1  ),
-//    .cfg_alpg_addr_p   (cfg_alpg_addr_p   ),
-//    .cfg_alpg_mem_size (cfg_alpg_mem_size ),
-//    .rx_data_sof       (rx_data_sof       ),
-//    .rx_data_eof       (rx_data_eof       ),
-//    .cfg_rx_data_num   (cfg_rx_data_num   ),
-//    .rx_data_bus       (rx_data_bus       ),
-//    .rx_data_vld_bus   (rx_data_vld_bus   ),
-//    .pat_rd_req        (pat_rd_req        ),
-//    .pat_rd_base_addr  (pat_rd_base_addr  ),
-//    .pat_data_num      (pat_data_num      ),
-//    .pat_wr_req        (pat_wr_req        ),
-//    .pat_wr_base_addr  (pat_wr_base_addr  ),
-//    .ddr_rst           (ddr_rst           ),
-//    .ddr_wr_req        (ddr_wr_req        ),
-//    .ddr_wr_done       (ddr_wr_done       ),
-//    .wr_fifo_prog_full (wr_fifo_prog_full ),
-//    .ddr_wr_base_addr  (ddr_wr_base_addr  ),
-//    .ddr_wr_data_num   (ddr_wr_data_num   ),
-//    .ddr_wr_data       (ddr_wr_data       ),
-//    .ddr_wr_data_vld   (ddr_wr_data_vld   ),
-//    .ddr_rd_req        (ddr_rd_req        ),
-//    .ddr_rd_done       (ddr_rd_done       ),
-//    .rd_fifo_empty     (rd_fifo_empty     ),
-//    .ddr_rd_base_addr  (ddr_rd_base_addr  ),
-//    .ddr_rd_data_num   (ddr_rd_data_num   ),
-//    .ddr_rd_data       (ddr_rd_data       ),
-//    .ddr_rd_data_vld   (ddr_rd_data_vld   ),
-//    .ddr_rst_done      (ddr_rst_done      ),
-//    .ui_clk            (ui_clk            )
-//  );
-
-
+//assign ddr_wr_req = (!ddr_wr_req_flag_d1) && ddr_wr_req_flag;
+//assign ddr_rd_req = (!ddr_rd_req_flag_d1) && ddr_rd_req_flag;
+//
+//always @(posedge sys_clk) 
+//begin
+//  if(ddr_wr_req)
+//  begin
+//    ddr_wr_data_vld <= 'd1;
+//  end
+//  else if(wr_data_cnt == ddr_wr_data_num - 'd1)
+//  begin
+//    ddr_wr_data_vld <= 'd0;
+//  end  
+//  else
+//  begin
+//    ddr_wr_data_vld <= ddr_wr_data_vld;
+//  end  
+//end
+//
+//always @(posedge sys_clk) 
+//begin
+//  if(ddr_wr_data_vld)
+//  begin
+//    wr_data_cnt <= wr_data_cnt + 'd1;
+//  end
+//  else
+//  begin
+//    wr_data_cnt <= 'd0;
+//  end  
+//end
+//
+//assign ddr_wr_data = wr_data_cnt;
 
 endmodule
