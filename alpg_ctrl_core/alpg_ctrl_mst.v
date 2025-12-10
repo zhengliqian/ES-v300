@@ -19,14 +19,14 @@
 //////////////////////////////////////////////////////////////////////////////////
 module alpg_ctrl_mst 
 (
-    input                  clk,              //200M
-    input                  rst,
-    input                  alpg_start,
-    input                  alpg_restart,
-    input                  alpg_stop ,
+    input                  clk                 ,              //200M
+    input                  rst                 ,
+    input                  alpg_start          ,
+    input                  alpg_restart        ,
+    input                  alpg_stop           ,
     output reg             alpg_work_busy = 'd0,
     (*mark_debug = "true"*)(*keep = "true"*)input                  alpg_done ,
-    output reg             init_start = 'd0,
+    output reg             init_start     = 'd0,
     input                  init_done
 );
     
