@@ -20,6 +20,7 @@
 module alpg_ddr_task 
 #(
     parameter GT_DATA_LANE   = 2    ,
+    parameter GT_LANE_DW     = 32   ,
     parameter DATA_NUM_DW    = 32   ,
     parameter DATA_TYPE_DW   = 2    ,
     parameter MEM_COPR_DW    = 2    ,
@@ -51,10 +52,9 @@ module alpg_ddr_task
     input     [DATA_TYPE_DW-1:0]                cfg_alpg_data_type         ,
     input                                       rx_data_sof                ,    
     input                                       rx_data_eof                ,    
-    input     [DATA_NUM_DW-1:0]                 cfg_rx_data_num            ,
-    input     [GT_DATA_LANE*DDR_DW-1:0]         rx_data_bus                ,
+    input     [GT_DATA_LANE*GT_LANE_DW-1:0]     rx_data_bus                ,
     input     [GT_DATA_LANE-1:0]                rx_data_vld_bus            ,
-    output    [GT_DATA_LANE*DDR_DW-1:0]         tx_data_bus                , 
+    output    [GT_DATA_LANE*GT_LANE_DW-1:0]     tx_data_bus                , 
     output    [GT_DATA_LANE-1:0]                tx_data_vld_bus            , 
     //pat task intf
     input                                       pat_wr_req                 ,
@@ -153,7 +153,7 @@ begin
     end    
     MEM_RST:
     begin
-      if(wr_data_cnt == (cfg_alpg_mem_size[DATA_NUM_DW:2] - 'd1))
+      if(wr_data_cnt == (cfg_alpg_mem_size[DATA_NUM_DW-1:2] - 'd1))
       begin
         nxt_st = MEM_OPR_END;
       end
@@ -183,7 +183,7 @@ begin
     end
     MEM_INIT_WR:
     begin
-      if(wr_data_cnt == (cfg_alpg_data_num[DATA_NUM_DW:2] - 'd1))
+      if(wr_data_cnt == (cfg_alpg_data_num[DATA_NUM_DW-1:2] - 'd1))
       begin
         nxt_st = MEM_OPR_END;
       end
@@ -224,7 +224,7 @@ begin
     end
     DUM2DUM:
     begin
-      if(wr_data_cnt == (cfg_alpg_mem_size[DATA_NUM_DW:2] - 'd1))
+      if(wr_data_cnt == (cfg_alpg_mem_size[DATA_NUM_DW-1:2] - 'd1))
       begin
         nxt_st = MEM_OPR_END;
       end
@@ -235,7 +235,7 @@ begin
     end  
     DUM_OR:
     begin
-      if(wr_data_cnt == (cfg_alpg_mem_size[DATA_NUM_DW:2] - 'd1))
+      if(wr_data_cnt == (cfg_alpg_mem_size[DATA_NUM_DW-1:2] - 'd1))
       begin
         nxt_st = MEM_OPR_END;
       end
@@ -246,7 +246,7 @@ begin
     end  
     DUM2PM:
     begin
-      if(wr_data_cnt == (cfg_alpg_mem_size[DATA_NUM_DW:2] - 'd1))
+      if(wr_data_cnt == (cfg_alpg_mem_size[DATA_NUM_DW-1:2] - 'd1))
       begin
         nxt_st = MEM_OPR_END;
       end
@@ -257,7 +257,7 @@ begin
     end  
     PM2DUM:
     begin
-      if(wr_data_cnt == (cfg_alpg_mem_size[DATA_NUM_DW:2] - 'd1))
+      if(wr_data_cnt == (cfg_alpg_mem_size[DATA_NUM_DW-1:2] - 'd1))
       begin
         nxt_st = MEM_OPR_END;
       end
@@ -485,7 +485,7 @@ end
 
 //gen init_data:gt_clk -> sys_clk
 localparam INIT_FIFO_DEPTH = 128;
-localparam INIT_FIFO_CNT_DW = $clog2(INIT_FIFO_DEPTH) + 1;
+localparam INIT_FIFO_CNT_DW = $clog2(INIT_FIFO_DEPTH)+2;
 
 wire init_fifo_empty; 
 wire init_fifo_full ; 
@@ -505,9 +505,9 @@ xpm_fifo_async #(
       .READ_MODE          ("std"                       ),           // String
       .RELATED_CLOCKS     (0                           ),           // DECIMAL
       .SIM_ASSERT_CHK     (0                           ),           // DECIMAL; 0=disable simulation messages, 1=enable simulation messages
-      .USE_ADV_FEATURES   ("1717"                      ),           // String
+      .USE_ADV_FEATURES   ("1313"                      ),           // String
       .WAKEUP_TIME        (0                           ),           // DECIMAL
-      .WRITE_DATA_WIDTH   (GT_DATA_LANE*DDR_DW         ),           // DECIMAL
+      .WRITE_DATA_WIDTH   (GT_DATA_LANE*GT_LANE_DW     ),           // DECIMAL
       .WR_DATA_COUNT_WIDTH(INIT_FIFO_CNT_DW            )            // DECIMAL
    )
    u_init_wr_ddr_fifo 
@@ -638,7 +638,7 @@ end
 
 always @(posedge clk) 
 begin
-  if((ddr_copy_or_rd_addr0[6:0] == 'h7f) || (ddr_copy_or_rd_addr0 == cfg_alpg_mem_size[DATA_NUM_DW:2] - 'd1))
+  if((ddr_copy_or_rd_addr0[6:0] == 'h7f) || (ddr_copy_or_rd_addr0 == cfg_alpg_mem_size[DATA_NUM_DW-1:2] - 'd1))
   begin
     ddr_copy_or_rd_rdy0 <= 'd0;
   end
@@ -654,11 +654,11 @@ end
 
 always @(posedge clk) 
 begin
-  if(alpg_mem_copy ||(ddr_copy_or_rd_addr1[6:0] == 'h7f) || (ddr_copy_or_rd_addr1 == cfg_alpg_mem_size[DATA_NUM_DW:2] - 'd1))
+  if(alpg_mem_copy ||(ddr_copy_or_rd_addr1[6:0] == 'h7f) || (ddr_copy_or_rd_addr1 == cfg_alpg_mem_size[DATA_NUM_DW-1:2] - 'd1))
   begin
     ddr_copy_or_rd_rdy1 <= 'd0;
   end
-  else if((ddr_copy_or_rd_addr0 == cfg_alpg_mem_size[DATA_NUM_DW:2] - 'd1) || (ddr_copy_or_rd_addr0[6:0] == 'h7f))
+  else if((ddr_copy_or_rd_addr0 == cfg_alpg_mem_size[DATA_NUM_DW-1:2] - 'd1) || (ddr_copy_or_rd_addr0[6:0] == 'h7f))
   begin
     ddr_copy_or_rd_rdy1 <= 'd1;
   end
@@ -777,11 +777,11 @@ xpm_fifo_async #(
       .PROG_EMPTY_THRESH  (10                          ),           // DECIMAL
       .PROG_FULL_THRESH   (10                          ),           // DECIMAL
       .RD_DATA_COUNT_WIDTH(INIT_FIFO_CNT_DW            ),           // DECIMAL
-      .READ_DATA_WIDTH    (GT_DATA_LANE*DDR_DW         ),           // DECIMAL
+      .READ_DATA_WIDTH    (GT_DATA_LANE*GT_LANE_DW     ),           // DECIMAL
       .READ_MODE          ("std"                       ),           // String
       .RELATED_CLOCKS     (0                           ),           // DECIMAL
       .SIM_ASSERT_CHK     (0                           ),           // DECIMAL; 0=disable simulation messages, 1=enable simulation messages
-      .USE_ADV_FEATURES   ("1717"                      ),           // String
+      .USE_ADV_FEATURES   ("1313"                      ),           // String
       .WAKEUP_TIME        (0                           ),           // DECIMAL
       .WRITE_DATA_WIDTH   (DDR_DW                      ),           // DECIMAL
       .WR_DATA_COUNT_WIDTH(INIT_FIFO_CNT_DW            )            // DECIMAL
